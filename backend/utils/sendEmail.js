@@ -1,41 +1,51 @@
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 
-// Initialize Resend with API key
-const getResendClient = () => {
-  if (!process.env.RESEND_API_KEY) {
-    return null;
+// Create transporter for Mailjet SMTP
+let transporter = null;
+
+const getTransporter = () => {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host: 'in-v3.mailjet.com',
+      port: 587,
+      secure: false,
+      auth: {
+        user: process.env.MAILJET_API_KEY,
+        pass: process.env.MAILJET_SECRET_KEY
+      }
+    });
   }
-  return new Resend(process.env.RESEND_API_KEY);
+  return transporter;
 };
 
 const sendEmail = async ({ to, subject, html }) => {
-  const resend = getResendClient();
+  // Check if Mailjet is configured
+  const isConfigured = process.env.MAILJET_API_KEY && process.env.MAILJET_SECRET_KEY;
 
-  if (!resend) {
+  if (!isConfigured) {
     console.log('========================================');
-    console.log('RESEND NOT CONFIGURED - Skipping send');
+    console.log('MAILJET NOT CONFIGURED - Skipping send');
     console.log('To:', to);
     console.log('Subject:', subject);
     console.log('========================================');
     return;
   }
 
+  const mailTransporter = getTransporter();
+
+  const mailOptions = {
+    from: `"Sports Teammate Finder" <${process.env.MAILJET_SENDER_EMAIL}>`,
+    to,
+    subject,
+    html
+  };
+
   try {
-    const { data, error } = await resend.emails.send({
-      from: 'Sports Teammate Finder <onboarding@resend.dev>',
-      to: [to],
-      subject,
-      html
-    });
-
-    if (error) {
-      console.error('Resend error:', error);
-      throw new Error(error.message);
-    }
-
-    console.log('Email sent successfully to:', to, 'ID:', data?.id);
+    const info = await mailTransporter.sendMail(mailOptions);
+    console.log('Email sent successfully to:', to, 'MessageId:', info.messageId);
   } catch (error) {
     console.error('Email send failed:', error.message);
+    transporter = null;
     throw error;
   }
 };
