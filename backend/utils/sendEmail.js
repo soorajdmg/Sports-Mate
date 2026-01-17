@@ -1,28 +1,20 @@
-const nodemailer = require('nodemailer');
+const Mailjet = require('node-mailjet');
 
-// Create transporter for Mailjet SMTP
-let transporter = null;
-
-const getTransporter = () => {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: 'in-v3.mailjet.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.MAILJET_API_KEY,
-        pass: process.env.MAILJET_SECRET_KEY
-      }
-    });
+// Initialize Mailjet client
+const getMailjetClient = () => {
+  if (!process.env.MAILJET_API_KEY || !process.env.MAILJET_SECRET_KEY) {
+    return null;
   }
-  return transporter;
+  return new Mailjet({
+    apiKey: process.env.MAILJET_API_KEY,
+    apiSecret: process.env.MAILJET_SECRET_KEY
+  });
 };
 
 const sendEmail = async ({ to, subject, html }) => {
-  // Check if Mailjet is configured
-  const isConfigured = process.env.MAILJET_API_KEY && process.env.MAILJET_SECRET_KEY;
+  const mailjet = getMailjetClient();
 
-  if (!isConfigured) {
+  if (!mailjet) {
     console.log('========================================');
     console.log('MAILJET NOT CONFIGURED - Skipping send');
     console.log('To:', to);
@@ -31,21 +23,30 @@ const sendEmail = async ({ to, subject, html }) => {
     return;
   }
 
-  const mailTransporter = getTransporter();
-
-  const mailOptions = {
-    from: `"Sports Teammate Finder" <${process.env.MAILJET_SENDER_EMAIL}>`,
-    to,
-    subject,
-    html
-  };
-
   try {
-    const info = await mailTransporter.sendMail(mailOptions);
-    console.log('Email sent successfully to:', to, 'MessageId:', info.messageId);
+    const result = await mailjet
+      .post('send', { version: 'v3.1' })
+      .request({
+        Messages: [
+          {
+            From: {
+              Email: process.env.MAILJET_SENDER_EMAIL,
+              Name: 'Sports Teammate Finder'
+            },
+            To: [
+              {
+                Email: to
+              }
+            ],
+            Subject: subject,
+            HTMLPart: html
+          }
+        ]
+      });
+
+    console.log('Email sent successfully to:', to, 'Status:', result.body.Messages[0].Status);
   } catch (error) {
     console.error('Email send failed:', error.message);
-    transporter = null;
     throw error;
   }
 };
