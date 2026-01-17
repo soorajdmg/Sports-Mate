@@ -48,7 +48,7 @@ app.use('/api/auth/login/send-otp', otpLimiter);
 
 // CORS - handle multiple origins for production
 const allowedOrigins = [
-  'https://sportsmate-sooraj.onrender.com/',
+  'https://sportsmate-sooraj.onrender.com',
   'http://localhost:5173',
   'http://localhost:3000',
   process.env.FRONTEND_URL
