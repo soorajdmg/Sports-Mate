@@ -1,44 +1,47 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
+
+// Initialize Resend with API key
+const getResendClient = () => {
+  if (!process.env.RESEND_API_KEY) {
+    return null;
+  }
+  return new Resend(process.env.RESEND_API_KEY);
+};
 
 const sendEmail = async ({ to, subject, html }) => {
-  // Check if email is properly configured
-  const isEmailConfigured =
-    process.env.EMAIL_USER &&
-    process.env.EMAIL_PASS &&
-    !process.env.EMAIL_USER.includes('your-email') &&
-    !process.env.EMAIL_PASS.includes('your-app-password');
+  const resend = getResendClient();
 
-  if (!isEmailConfigured) {
+  if (!resend) {
     console.log('========================================');
-    console.log('EMAIL NOT CONFIGURED - Skipping send');
+    console.log('RESEND NOT CONFIGURED - Skipping send');
     console.log('To:', to);
     console.log('Subject:', subject);
     console.log('========================================');
-    return; // Skip sending in dev mode
+    return;
   }
 
-  const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    secure: false,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
+  try {
+    const { data, error } = await resend.emails.send({
+      from: 'Sports Teammate Finder <onboarding@resend.dev>',
+      to: [to],
+      subject,
+      html
+    });
+
+    if (error) {
+      console.error('Resend error:', error);
+      throw new Error(error.message);
     }
-  });
 
-  const mailOptions = {
-    from: `"Sports Teammate Finder" <${process.env.EMAIL_USER}>`,
-    to,
-    subject,
-    html
-  };
-
-  await transporter.sendMail(mailOptions);
+    console.log('Email sent successfully to:', to, 'ID:', data?.id);
+  } catch (error) {
+    console.error('Email send failed:', error.message);
+    throw error;
+  }
 };
 
 const sendOTPEmail = async (email, otp, purpose) => {
-  // Always log OTP to console in development for testing
+  // Always log OTP to console for debugging
   console.log('========================================');
   console.log(`OTP for ${email}: ${otp}`);
   console.log(`Purpose: ${purpose}`);
