@@ -9,7 +9,15 @@ const { sendOTPEmail } = require('../utils/sendEmail');
 // @access  Public
 const sendSignupOTP = async (req, res) => {
   try {
-    const { email, name, sport, city, area, latitude, longitude } = req.body;
+    const { email, name, password, sport, city, area, latitude, longitude } = req.body;
+
+    // Validate password
+    if (!password || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
+      });
+    }
 
     // Check if user already exists and is verified
     const existingUser = await User.findOne({ email });
@@ -34,11 +42,12 @@ const sendSignupOTP = async (req, res) => {
       expiresAt: new Date(Date.now() + 5 * 60 * 1000) // 5 minutes
     });
 
-    // If user doesn't exist, create unverified user
+    // If user doesn't exist, create unverified user with password
     if (!existingUser) {
       await User.create({
         email,
         name,
+        password,
         sport,
         city,
         area,
@@ -47,19 +56,24 @@ const sendSignupOTP = async (req, res) => {
         isVerified: false
       });
     } else {
-      // Update existing unverified user
-      await User.findByIdAndUpdate(existingUser._id, {
-        name,
-        sport,
-        city,
-        area,
-        latitude: latitude || null,
-        longitude: longitude || null
-      });
+      // Update existing unverified user (including password)
+      existingUser.name = name;
+      existingUser.password = password;
+      existingUser.sport = sport;
+      existingUser.city = city;
+      existingUser.area = area;
+      existingUser.latitude = latitude || null;
+      existingUser.longitude = longitude || null;
+      await existingUser.save(); // This will hash the password via pre-save hook
     }
 
-    // Send OTP via email
-    await sendOTPEmail(email, otp, 'signup');
+    // Send OTP via email (non-blocking - don't fail signup if email fails)
+    try {
+      await sendOTPEmail(email, otp, 'signup');
+    } catch (emailError) {
+      console.error('Email send failed, but OTP was generated:', emailError.message);
+      // OTP is logged to console in sendOTPEmail, so signup can still proceed
+    }
 
     res.status(200).json({
       success: true,
@@ -156,111 +170,53 @@ const verifySignupOTP = async (req, res) => {
   }
 };
 
-// @desc    Send OTP for login
-// @route   POST /api/auth/login/send-otp
+// @desc    Login with email and password
+// @route   POST /api/auth/login
 // @access  Public
-const sendLoginOTP = async (req, res) => {
+const login = async (req, res) => {
   try {
-    const { email } = req.body;
-    console.log('Login attempt for email:', email);
+    const { email, password } = req.body;
 
-    // Check if user exists and is verified
-    const user = await User.findOne({ email: email.toLowerCase(), isVerified: true });
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide email and password'
+      });
+    }
+
+    // Find user and include password field
+    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+
     if (!user) {
-      console.log('User not found or not verified:', email);
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
-        message: 'User not found. Please sign up first.'
-      });
-    }
-    console.log('User found:', user.name);
-
-    // Delete any existing OTP for this email
-    await OTP.deleteMany({ email });
-
-    // Generate new OTP
-    const otp = generateOTP();
-
-    // Save OTP to database (hashed)
-    await OTP.create({
-      email,
-      otp,
-      purpose: 'login',
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000) // 5 minutes
-    });
-
-    // Send OTP via email
-    await sendOTPEmail(email, otp, 'login');
-
-    res.status(200).json({
-      success: true,
-      message: 'OTP sent successfully to your email'
-    });
-  } catch (error) {
-    console.error('Send Login OTP Error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to send OTP. Please try again.'
-    });
-  }
-};
-
-// @desc    Verify OTP and login
-// @route   POST /api/auth/login/verify-otp
-// @access  Public
-const verifyLoginOTP = async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-
-    // Find OTP record
-    const otpRecord = await OTP.findOne({ email, purpose: 'login' });
-
-    if (!otpRecord) {
-      return res.status(400).json({
-        success: false,
-        message: 'OTP not found or expired. Please request a new one.'
+        message: 'Invalid email or password'
       });
     }
 
-    // Check if OTP is expired
-    if (otpRecord.isExpired()) {
-      await OTP.deleteOne({ _id: otpRecord._id });
-      return res.status(400).json({
+    // Check if user is verified
+    if (!user.isVerified) {
+      return res.status(401).json({
         success: false,
-        message: 'OTP has expired. Please request a new one.'
+        message: 'Please verify your email first'
       });
     }
 
-    // Check attempts
-    if (otpRecord.attempts >= 3) {
-      await OTP.deleteOne({ _id: otpRecord._id });
-      return res.status(400).json({
-        success: false,
-        message: 'Too many failed attempts. Please request a new OTP.'
-      });
-    }
+    // Check password
+    const isMatch = await user.comparePassword(password);
 
-    // Verify OTP
-    const isValid = await otpRecord.verifyOTP(otp);
-
-    if (!isValid) {
-      otpRecord.attempts += 1;
-      await otpRecord.save();
-      return res.status(400).json({
+    if (!isMatch) {
+      return res.status(401).json({
         success: false,
-        message: 'Invalid OTP. Please try again.'
+        message: 'Invalid email or password'
       });
     }
 
     // Update user activity
-    const user = await User.findOneAndUpdate(
-      { email },
-      { isActive: true, lastActive: new Date() },
-      { new: true }
-    );
-
-    // Delete OTP record (single-use)
-    await OTP.deleteOne({ _id: otpRecord._id });
+    user.isActive = true;
+    user.lastActive = new Date();
+    await user.save({ validateModifiedOnly: true });
 
     // Generate JWT token
     const token = generateToken(user._id);
@@ -279,7 +235,7 @@ const verifyLoginOTP = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Verify Login OTP Error:', error);
+    console.error('Login Error:', error);
     res.status(500).json({
       success: false,
       message: 'Login failed. Please try again.'
@@ -376,8 +332,7 @@ const logout = async (req, res) => {
 module.exports = {
   sendSignupOTP,
   verifySignupOTP,
-  sendLoginOTP,
-  verifyLoginOTP,
+  login,
   getMe,
   updateProfile,
   logout

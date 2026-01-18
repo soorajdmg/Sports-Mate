@@ -9,6 +9,8 @@ const Signup = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    password: '',
+    confirmPassword: '',
     sport: '',
     city: '',
     area: '',
@@ -17,6 +19,7 @@ const Signup = () => {
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [sports, setSports] = useState([]);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { user, login } = useAuth();
   const navigate = useNavigate();
@@ -52,10 +55,30 @@ const Signup = () => {
 
   const handleSendOTP = async (e) => {
     e.preventDefault();
+
+    // Validate password match
+    if (formData.password !== formData.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    // Validate password length
+    if (formData.password.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await authAPI.sendSignupOTP(formData);
+      await authAPI.sendSignupOTP({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        sport: formData.sport,
+        city: formData.city,
+        area: formData.area,
+      });
       toast.success('OTP sent to your email!');
       setStep(2);
       setCountdown(60);
@@ -90,7 +113,14 @@ const Signup = () => {
     setLoading(true);
 
     try {
-      await authAPI.sendSignupOTP(formData);
+      await authAPI.sendSignupOTP({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        sport: formData.sport,
+        city: formData.city,
+        area: formData.area,
+      });
       toast.success('OTP resent!');
       setCountdown(60);
     } catch (error) {
@@ -171,6 +201,47 @@ const Signup = () => {
                   required
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                   placeholder="john@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    required
+                    minLength={6}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all pr-12"
+                    placeholder="Min. 6 characters"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  >
+                    {showPassword ? '🙈' : '👁️'}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Confirm Password
+                </label>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  required
+                  minLength={6}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  placeholder="Confirm your password"
                 />
               </div>
 

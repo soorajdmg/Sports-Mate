@@ -3,21 +3,19 @@ const router = express.Router();
 const {
   sendSignupOTP,
   verifySignupOTP,
-  sendLoginOTP,
-  verifyLoginOTP,
+  login,
   getMe,
   updateProfile,
   logout
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 
-// Signup routes
+// Signup routes (with OTP verification)
 router.post('/signup/send-otp', sendSignupOTP);
 router.post('/signup/verify-otp', verifySignupOTP);
 
-// Login routes
-router.post('/login/send-otp', sendLoginOTP);
-router.post('/login/verify-otp', verifyLoginOTP);
+// Login route (password-based)
+router.post('/login', login);
 
 // Protected routes
 router.get('/me', protect, getMe);

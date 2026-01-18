@@ -44,8 +44,7 @@ api.interceptors.response.use(
 export const authAPI = {
   sendSignupOTP: (data) => api.post('/auth/signup/send-otp', data),
   verifySignupOTP: (data) => api.post('/auth/signup/verify-otp', data),
-  sendLoginOTP: (data) => api.post('/auth/login/send-otp', data),
-  verifyLoginOTP: (data) => api.post('/auth/login/verify-otp', data),
+  login: (data) => api.post('/auth/login', data),
   getMe: () => api.get('/auth/me'),
   updateProfile: (data) => api.put('/auth/profile', data),
   logout: () => api.post('/auth/logout'),
