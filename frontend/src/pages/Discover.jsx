@@ -8,10 +8,12 @@ const Discover = () => {
   const [teammates, setTeammates] = useState([]);
   const [sports, setSports] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [userHasLocation, setUserHasLocation] = useState(false);
   const [filters, setFilters] = useState({
     sport: searchParams.get('sport') || '',
     city: searchParams.get('city') || '',
-    area: searchParams.get('area') || '',
+    name: searchParams.get('name') || '',
+    maxDistance: searchParams.get('maxDistance') || '',
     activeOnly: searchParams.get('activeOnly') === 'true',
   });
 
@@ -34,11 +36,13 @@ const Discover = () => {
         const params = {};
         if (filters.sport) params.sport = filters.sport;
         if (filters.city) params.city = filters.city;
-        if (filters.area) params.area = filters.area;
+        if (filters.name) params.name = filters.name;
+        if (filters.maxDistance) params.maxDistance = filters.maxDistance;
         if (filters.activeOnly) params.activeOnly = 'true';
 
         const response = await userAPI.discoverTeammates(params);
         setTeammates(response.data.teammates);
+        setUserHasLocation(response.data.userHasLocation);
       } catch (error) {
         console.error('Failed to fetch teammates:', error);
       } finally {
@@ -61,12 +65,15 @@ const Discover = () => {
   };
 
   const clearFilters = () => {
-    setFilters({ sport: '', city: '', area: '', activeOnly: false });
+    setFilters({ sport: '', city: '', name: '', maxDistance: '', activeOnly: false });
     setSearchParams({});
   };
 
   const hasFilters =
-    filters.sport || filters.city || filters.area || filters.activeOnly;
+    filters.sport || filters.city || filters.name || filters.maxDistance || filters.activeOnly;
+
+  // Distance options for the slider
+  const distanceMarks = [5, 10, 25, 50, 100];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -77,7 +84,7 @@ const Discover = () => {
             Discover Teammates
           </h1>
           <p className="text-gray-600">
-            Find sports enthusiasts in your area or explore other cities
+            Find sports enthusiasts near you or explore other cities
           </p>
         </div>
 
@@ -95,7 +102,22 @@ const Discover = () => {
             )}
           </div>
 
-          <div className="grid md:grid-cols-4 gap-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            {/* Name Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Name
+              </label>
+              <input
+                type="text"
+                value={filters.name}
+                onChange={(e) => handleFilterChange('name', e.target.value)}
+                placeholder="Search by name..."
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
+            </div>
+
+            {/* Sport Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Sport
@@ -114,6 +136,7 @@ const Discover = () => {
               </select>
             </div>
 
+            {/* City Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 City
@@ -127,19 +150,7 @@ const Discover = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Area
-              </label>
-              <input
-                type="text"
-                value={filters.area}
-                onChange={(e) => handleFilterChange('area', e.target.value)}
-                placeholder="Enter area..."
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              />
-            </div>
-
+            {/* Active Only */}
             <div className="flex items-end">
               <label className="flex items-center space-x-2 cursor-pointer">
                 <input
@@ -153,6 +164,63 @@ const Discover = () => {
                 <span className="text-gray-700">Active Only</span>
                 <span className="text-green-500">🟢</span>
               </label>
+            </div>
+          </div>
+
+          {/* Distance Filter */}
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Maximum Distance
+              </label>
+              {!userHasLocation && (
+                <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
+                  Update your location in Profile to enable
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={filters.maxDistance || 0}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  handleFilterChange('maxDistance', val === '0' ? '' : val);
+                }}
+                disabled={!userHasLocation}
+                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <div className="w-24 text-center">
+                {filters.maxDistance ? (
+                  <span className="font-semibold text-indigo-600">
+                    {filters.maxDistance} km
+                  </span>
+                ) : (
+                  <span className="text-gray-400">Any</span>
+                )}
+              </div>
+            </div>
+
+            {/* Distance markers */}
+            <div className="flex justify-between mt-1 px-1">
+              {distanceMarks.map((mark) => (
+                <button
+                  key={mark}
+                  onClick={() => handleFilterChange('maxDistance', mark.toString())}
+                  disabled={!userHasLocation}
+                  className={`text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    filters.maxDistance === mark.toString()
+                      ? 'text-indigo-600 font-medium'
+                      : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {mark}km
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -171,7 +239,7 @@ const Discover = () => {
         ) : teammates.length > 0 ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {teammates.map((teammate) => (
-              <TeammateCard key={teammate.id} teammate={teammate} />
+              <TeammateCard key={teammate.id} teammate={teammate} showDistance={userHasLocation} />
             ))}
           </div>
         ) : (

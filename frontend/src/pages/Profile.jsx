@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { authAPI, userAPI } from '../services/api';
 import toast from 'react-hot-toast';
+import LocationPicker from '../components/LocationPicker';
 
 const Profile = () => {
   const { user, updateUser } = useAuth();
@@ -10,6 +11,8 @@ const Profile = () => {
     sport: '',
     city: '',
     area: '',
+    latitude: null,
+    longitude: null,
   });
   const [sports, setSports] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -22,6 +25,8 @@ const Profile = () => {
         sport: user.sport,
         city: user.city,
         area: user.area,
+        latitude: user.latitude || null,
+        longitude: user.longitude || null,
       });
     }
   }, [user]);
@@ -197,34 +202,15 @@ const Profile = () => {
                   </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      City
-                    </label>
-                    <input
-                      type="text"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Area
-                    </label>
-                    <input
-                      type="text"
-                      name="area"
-                      value={formData.area}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                    />
-                  </div>
-                </div>
+                <LocationPicker
+                  city={formData.city}
+                  area={formData.area}
+                  latitude={formData.latitude}
+                  longitude={formData.longitude}
+                  onLocationChange={(location) => {
+                    setFormData({ ...formData, ...location });
+                  }}
+                />
 
                 <div className="flex space-x-4">
                   <button
@@ -243,6 +229,8 @@ const Profile = () => {
                         sport: user.sport,
                         city: user.city,
                         area: user.area,
+                        latitude: user.latitude || null,
+                        longitude: user.longitude || null,
                       });
                     }}
                     className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors"

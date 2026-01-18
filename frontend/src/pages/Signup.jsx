@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authAPI, userAPI } from '../services/api';
 import toast from 'react-hot-toast';
+import LocationPicker from '../components/LocationPicker';
 
 const Signup = () => {
   const [step, setStep] = useState(1);
@@ -14,6 +15,8 @@ const Signup = () => {
     sport: '',
     city: '',
     area: '',
+    latitude: null,
+    longitude: null,
   });
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -78,6 +81,8 @@ const Signup = () => {
         sport: formData.sport,
         city: formData.city,
         area: formData.area,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
       });
       toast.success('OTP sent to your email!');
       setStep(2);
@@ -120,6 +125,8 @@ const Signup = () => {
         sport: formData.sport,
         city: formData.city,
         area: formData.area,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
       });
       toast.success('OTP resent!');
       setCountdown(60);
@@ -265,36 +272,15 @@ const Signup = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    City
-                  </label>
-                  <input
-                    type="text"
-                    name="city"
-                    value={formData.city}
-                    onChange={handleChange}
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                    placeholder="Mumbai"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Area
-                  </label>
-                  <input
-                    type="text"
-                    name="area"
-                    value={formData.area}
-                    onChange={handleChange}
-                    required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                    placeholder="Andheri"
-                  />
-                </div>
-              </div>
+              <LocationPicker
+                city={formData.city}
+                area={formData.area}
+                latitude={formData.latitude}
+                longitude={formData.longitude}
+                onLocationChange={(location) => {
+                  setFormData({ ...formData, ...location });
+                }}
+              />
 
               <button
                 type="submit"
