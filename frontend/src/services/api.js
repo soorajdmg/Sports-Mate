@@ -90,4 +90,21 @@ export const messageAPI = {
   markAsRead: (userId) => api.post(`/messages/${userId}/read`),
 };
 
+// Venue APIs
+export const venueAPI = {
+  searchNearby: (params) => api.get('/venues/nearby', { params }),
+  getDetails: (placeId) => api.get(`/venues/${placeId}`),
+  getPlayers: (placeId) => api.get(`/venues/${placeId}/players`),
+  getPhotoUrl: (photoReference, maxWidth = 400) =>
+    `${API_URL}/venues/photo/${photoReference}?maxWidth=${maxWidth}`,
+};
+
+// Check-in APIs
+export const checkinAPI = {
+  checkin: (data) => api.post('/checkins', data),
+  getActive: () => api.get('/checkins/active'),
+  checkout: (checkinId) => api.delete(`/checkins/${checkinId}`),
+  getNearby: (params) => api.get('/checkins/nearby', { params }),
+};
+
 export default api;

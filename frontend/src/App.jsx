@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import { AdminProvider } from './context/AdminContext';
 import { WebSocketProvider } from './context/WebSocketContext';
 import { ConnectionProvider } from './context/ConnectionContext';
+import { VenueProvider } from './context/VenueContext';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminProtectedRoute from './components/AdminProtectedRoute';
@@ -17,6 +18,7 @@ import Discover from './pages/Discover';
 import Profile from './pages/Profile';
 import Connections from './pages/Connections';
 import Chat from './pages/Chat';
+import Venues from './pages/Venues';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 
@@ -26,7 +28,8 @@ function App() {
       <AuthProvider>
         <WebSocketProvider>
           <ConnectionProvider>
-            <AdminProvider>
+            <VenueProvider>
+              <AdminProvider>
               <Toaster
                 position="top-right"
                 toastOptions={{
@@ -106,6 +109,15 @@ function App() {
                     </ProtectedRoute>
                   }
                 />
+                <Route
+                  path="/venues"
+                  element={
+                    <ProtectedRoute>
+                      <Navbar />
+                      <Venues />
+                    </ProtectedRoute>
+                  }
+                />
 
                 {/* Admin routes */}
                 <Route path="/admin/login" element={<AdminLogin />} />
@@ -119,6 +131,7 @@ function App() {
                 />
               </Routes>
             </AdminProvider>
+            </VenueProvider>
           </ConnectionProvider>
         </WebSocketProvider>
       </AuthProvider>

@@ -15,6 +15,8 @@ const userRoutes = require('./routes/userRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const connectionRoutes = require('./routes/connectionRoutes');
 const messageRoutes = require('./routes/messageRoutes');
+const venueRoutes = require('./routes/venueRoutes');
+const checkinRoutes = require('./routes/checkinRoutes');
 
 const app = express();
 
@@ -92,6 +94,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/connections', connectionRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/venues', venueRoutes);
+app.use('/api/checkins', checkinRoutes);
 
 // 404 handler
 app.use((req, res) => {

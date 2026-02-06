@@ -39,6 +39,12 @@ const Navbar = () => {
                   Find Teammates
                 </Link>
                 <Link
+                  to="/venues"
+                  className="text-white hover:text-indigo-200 transition-colors px-3 py-2"
+                >
+                  Venues
+                </Link>
+                <Link
                   to="/connections"
                   className="text-white hover:text-indigo-200 transition-colors px-3 py-2 relative"
                 >
