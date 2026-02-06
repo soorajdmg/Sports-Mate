@@ -1,4 +1,5 @@
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -6,11 +7,14 @@ require('dotenv').config();
 
 const connectDB = require('./config/db');
 const seedAdmin = require('./utils/seedAdmin');
+const { setupWebSocket } = require('./websocket');
 
 // Route imports
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const connectionRoutes = require('./routes/connectionRoutes');
+const messageRoutes = require('./routes/messageRoutes');
 
 const app = express();
 
@@ -86,6 +90,8 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/connections', connectionRoutes);
+app.use('/api/messages', messageRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -106,8 +112,13 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+// Create HTTP server and attach WebSocket
+const server = http.createServer(app);
+const wss = setupWebSocket(server);
+
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`WebSocket server running on ws://localhost:${PORT}/ws`);
 });
 
-module.exports = app;
+module.exports = { app, server, wss };

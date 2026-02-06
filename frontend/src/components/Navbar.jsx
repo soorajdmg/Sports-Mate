@@ -1,8 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useConnection } from '../context/ConnectionContext';
 
 const Navbar = () => {
   const { user, logout } = useAuth();
+  const { pendingCount } = useConnection();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -35,6 +37,17 @@ const Navbar = () => {
                   className="text-white hover:text-indigo-200 transition-colors px-3 py-2"
                 >
                   Find Teammates
+                </Link>
+                <Link
+                  to="/connections"
+                  className="text-white hover:text-indigo-200 transition-colors px-3 py-2 relative"
+                >
+                  Connections
+                  {pendingCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
+                      {pendingCount > 9 ? '9+' : pendingCount}
+                    </span>
+                  )}
                 </Link>
                 <Link
                   to="/profile"

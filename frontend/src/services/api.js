@@ -68,4 +68,26 @@ export const adminAPI = {
   deleteUser: (id) => api.delete(`/admin/users/${id}`),
 };
 
+// Connection APIs
+export const connectionAPI = {
+  getConnections: () => api.get('/connections'),
+  getPendingRequests: () => api.get('/connections/pending'),
+  getSentRequests: () => api.get('/connections/sent'),
+  getConnectionStatus: (userId) => api.get(`/connections/status/${userId}`),
+  sendRequest: (userId) => api.post(`/connections/request/${userId}`),
+  acceptRequest: (connectionId) => api.post(`/connections/${connectionId}/accept`),
+  rejectRequest: (connectionId) => api.post(`/connections/${connectionId}/reject`),
+  cancelRequest: (connectionId) => api.delete(`/connections/cancel/${connectionId}`),
+  removeConnection: (connectionId) => api.delete(`/connections/${connectionId}`),
+};
+
+// Message APIs
+export const messageAPI = {
+  getConversations: () => api.get('/messages/conversations'),
+  getMessages: (userId, params) => api.get(`/messages/${userId}`, { params }),
+  getUnreadCount: () => api.get('/messages/unread/count'),
+  sendMessage: (userId, content) => api.post(`/messages/${userId}`, { content }),
+  markAsRead: (userId) => api.post(`/messages/${userId}/read`),
+};
+
 export default api;

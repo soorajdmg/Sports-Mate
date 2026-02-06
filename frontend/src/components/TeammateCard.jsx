@@ -1,3 +1,7 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useConnection } from '../context/ConnectionContext';
+
 const sportIcons = {
   football: '⚽',
   cricket: '🏏',
@@ -9,8 +13,20 @@ const sportIcons = {
   swimming: '🏊',
 };
 
-const TeammateCard = ({ teammate, showDistance = false }) => {
-  const { name, sport, city, area, isOnline, lastActive, distance } = teammate;
+const TeammateCard = ({ teammate, showDistance = false, showConnectButton = true }) => {
+  const { name, sport, city, area, isOnline, lastActive, distance, id } = teammate;
+  const navigate = useNavigate();
+  const { getConnectionStatus, sendConnectionRequest, cancelConnectionRequest } = useConnection();
+  const [connectionStatus, setConnectionStatus] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (showConnectButton && id) {
+      getConnectionStatus(id).then(status => {
+        setConnectionStatus(status);
+      });
+    }
+  }, [id, showConnectButton, getConnectionStatus]);
 
   const getTimeAgo = (date) => {
     const seconds = Math.floor((new Date() - new Date(date)) / 1000);
@@ -21,6 +37,87 @@ const TeammateCard = ({ teammate, showDistance = false }) => {
     if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
     return `${days}d ago`;
+  };
+
+  const handleConnect = async (e) => {
+    e.stopPropagation();
+    if (loading) return;
+
+    setLoading(true);
+    const success = await sendConnectionRequest(id);
+    if (success) {
+      setConnectionStatus({ status: 'pending', isRequester: true });
+    }
+    setLoading(false);
+  };
+
+  const handleCancelRequest = async (e) => {
+    e.stopPropagation();
+    if (loading || !connectionStatus?.connectionId) return;
+
+    setLoading(true);
+    const success = await cancelConnectionRequest(connectionStatus.connectionId, id);
+    if (success) {
+      setConnectionStatus(null);
+    }
+    setLoading(false);
+  };
+
+  const handleMessage = (e) => {
+    e.stopPropagation();
+    navigate(`/chat/${id}`);
+  };
+
+  const renderConnectionButton = () => {
+    if (!showConnectButton) return null;
+
+    const status = connectionStatus?.status;
+
+    if (status === 'accepted') {
+      return (
+        <button
+          onClick={handleMessage}
+          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors flex items-center space-x-1"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          <span>Message</span>
+        </button>
+      );
+    }
+
+    if (status === 'pending') {
+      if (connectionStatus?.isRequester) {
+        return (
+          <button
+            onClick={handleCancelRequest}
+            disabled={loading}
+            className="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Cancelling...' : 'Pending'}
+          </button>
+        );
+      }
+      return (
+        <span className="px-4 py-2 bg-yellow-100 text-yellow-700 text-sm font-medium rounded-lg">
+          Awaiting
+        </span>
+      );
+    }
+
+    return (
+      <button
+        onClick={handleConnect}
+        disabled={loading}
+        className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center space-x-1"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+        </svg>
+        <span>{loading ? 'Sending...' : 'Connect'}</span>
+      </button>
+    );
   };
 
   return (
@@ -72,11 +169,14 @@ const TeammateCard = ({ teammate, showDistance = false }) => {
             {area}, {city}
           </span>
         </div>
-        {showDistance && distance !== undefined && (
-          <span className="text-sm bg-indigo-50 text-indigo-600 px-2 py-1 rounded-lg font-medium">
-            {distance < 1 ? `${Math.round(distance * 1000)}m` : `${distance.toFixed(1)}km`}
-          </span>
-        )}
+        <div className="flex items-center space-x-2">
+          {showDistance && distance !== undefined && distance !== null && (
+            <span className="text-sm bg-indigo-50 text-indigo-600 px-2 py-1 rounded-lg font-medium">
+              {distance < 1 ? `${Math.round(distance * 1000)}m` : `${distance.toFixed(1)}km`}
+            </span>
+          )}
+          {renderConnectionButton()}
+        </div>
       </div>
     </div>
   );
