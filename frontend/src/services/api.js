@@ -95,8 +95,6 @@ export const venueAPI = {
   searchNearby: (params) => api.get('/venues/nearby', { params }),
   getDetails: (placeId) => api.get(`/venues/${placeId}`),
   getPlayers: (placeId) => api.get(`/venues/${placeId}/players`),
-  getPhotoUrl: (photoReference, maxWidth = 400) =>
-    `${API_URL}/venues/photo/${photoReference}?maxWidth=${maxWidth}`,
 };
 
 // Check-in APIs

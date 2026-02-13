@@ -2,27 +2,68 @@ const Checkin = require('../models/Checkin');
 const User = require('../models/User');
 const Connection = require('../models/Connection');
 
-// Sport type to Google Places keywords mapping
-const sportKeywords = {
-  football: ['football ground', 'soccer field', 'football stadium'],
-  cricket: ['cricket ground', 'cricket stadium', 'cricket pitch'],
-  badminton: ['badminton court', 'badminton hall'],
-  tennis: ['tennis court', 'tennis club'],
-  basketball: ['basketball court', 'basketball ground'],
-  volleyball: ['volleyball court'],
-  hockey: ['hockey field', 'hockey ground'],
-  swimming: ['swimming pool', 'aquatic center'],
-  general: ['sports complex', 'stadium', 'gym', 'fitness center']
+// Sport type to Overpass API query tags mapping
+const sportOverpassTags = {
+  football: ['sport=soccer', 'sport=football', 'leisure=pitch"],sport"~"soccer|football"'],
+  cricket: ['sport=cricket'],
+  badminton: ['sport=badminton'],
+  tennis: ['sport=tennis'],
+  basketball: ['sport=basketball'],
+  volleyball: ['sport=volleyball'],
+  hockey: ['sport=hockey', 'sport=field_hockey'],
+  swimming: ['leisure=swimming_pool', 'sport=swimming'],
+  general: ['leisure=sports_centre', 'leisure=stadium', 'leisure=pitch', 'leisure=fitness_centre']
 };
 
-// Google Places API types for sports venues
-const placeTypes = ['gym', 'stadium', 'park'];
-
-// In-memory cache for venue searches (simple implementation)
+// In-memory cache for venue searches
 const venueCache = new Map();
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
-// @desc    Search nearby venues
+// Build Overpass query for sport venues
+const buildOverpassQuery = (lat, lng, radiusMeters, sport) => {
+  const tags = sportOverpassTags[sport] || sportOverpassTags.general;
+
+  // Build union of queries for each tag
+  let nodeQueries = '';
+  let wayQueries = '';
+
+  tags.forEach(tag => {
+    const [key, value] = tag.split('=');
+    nodeQueries += `  node["${key}"="${value}"](around:${radiusMeters},${lat},${lng});\n`;
+    wayQueries += `  way["${key}"="${value}"](around:${radiusMeters},${lat},${lng});\n`;
+  });
+
+  // Also search for generic sport/leisure facilities nearby
+  if (sport !== 'general') {
+    nodeQueries += `  node["leisure"="pitch"]["sport"="${sport === 'football' ? 'soccer' : sport}"](around:${radiusMeters},${lat},${lng});\n`;
+    wayQueries += `  way["leisure"="pitch"]["sport"="${sport === 'football' ? 'soccer' : sport}"](around:${radiusMeters},${lat},${lng});\n`;
+  }
+
+  return `
+[out:json][timeout:25];
+(
+${nodeQueries}${wayQueries}
+);
+out center tags;
+  `.trim();
+};
+
+// Calculate distance between two coordinates using Haversine formula
+const calculateDistance = (lat1, lng1, lat2, lng2) => {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+// @desc    Search nearby venues using Overpass API (OpenStreetMap)
 // @route   GET /api/venues/nearby
 // @access  Private
 const searchNearbyVenues = async (req, res) => {
@@ -36,7 +77,7 @@ const searchNearbyVenues = async (req, res) => {
       });
     }
 
-    const cacheKey = `${lat}-${lng}-${radius}-${sport}`;
+    const cacheKey = `${parseFloat(lat).toFixed(3)}-${parseFloat(lng).toFixed(3)}-${radius}-${sport}`;
     const cached = venueCache.get(cacheKey);
 
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -47,59 +88,97 @@ const searchNearbyVenues = async (req, res) => {
       });
     }
 
-    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-    if (!apiKey) {
+    const query = buildOverpassQuery(lat, lng, radius, sport);
+
+    const response = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(query)}`
+    });
+
+    if (!response.ok) {
+      console.error('Overpass API Error:', response.status);
       return res.status(500).json({
         success: false,
-        message: 'Google Places API key not configured'
+        message: 'Failed to fetch venues'
       });
     }
 
-    // Get keywords for the sport
-    const keywords = sportKeywords[sport] || sportKeywords.general;
-    const keyword = keywords[0]; // Use primary keyword
-
-    // Call Google Places Nearby Search API
-    const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radius}&keyword=${encodeURIComponent(keyword)}&key=${apiKey}`;
-
-    const response = await fetch(url);
     const data = await response.json();
 
-    if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-      console.error('Google Places API Error:', data.status, data.error_message);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to fetch venues from Google Places'
-      });
-    }
+    // Parse OSM elements into venue objects
+    const venues = (data.elements || [])
+      .map(element => {
+        const venueLat = element.lat || element.center?.lat;
+        const venueLng = element.lon || element.center?.lon;
 
-    const venues = (data.results || []).map(place => ({
-      placeId: place.place_id,
-      name: place.name,
-      address: place.vicinity,
-      location: {
-        lat: place.geometry.location.lat,
-        lng: place.geometry.location.lng
-      },
-      rating: place.rating || null,
-      totalRatings: place.user_ratings_total || 0,
-      types: place.types,
-      isOpen: place.opening_hours?.open_now ?? null,
-      photoReference: place.photos?.[0]?.photo_reference || null
-    }));
+        if (!venueLat || !venueLng) return null;
+
+        const tags = element.tags || {};
+        const name = tags.name || tags['name:en'] || tags.sport || 'Sports Venue';
+
+        // Build address from OSM tags
+        const addressParts = [
+          tags['addr:street'],
+          tags['addr:city'] || tags['addr:suburb'],
+          tags['addr:state']
+        ].filter(Boolean);
+        const address = addressParts.length > 0
+          ? addressParts.join(', ')
+          : `${venueLat.toFixed(4)}, ${venueLng.toFixed(4)}`;
+
+        const distance = calculateDistance(
+          parseFloat(lat), parseFloat(lng),
+          venueLat, venueLng
+        );
+
+        return {
+          placeId: `osm-${element.type}-${element.id}`,
+          osmId: element.id,
+          osmType: element.type,
+          name,
+          address,
+          location: { lat: venueLat, lng: venueLng },
+          sport: tags.sport || null,
+          surface: tags.surface || null,
+          leisure: tags.leisure || null,
+          distance: Math.round(distance * 10) / 10,
+          tags: {
+            sport: tags.sport,
+            leisure: tags.leisure,
+            surface: tags.surface,
+            access: tags.access,
+            lit: tags.lit,
+            opening_hours: tags.opening_hours
+          }
+        };
+      })
+      .filter(v => v !== null)
+      .sort((a, b) => a.distance - b.distance);
+
+    // Deduplicate by name + proximity (within 50m)
+    const deduped = [];
+    venues.forEach(venue => {
+      const isDuplicate = deduped.some(
+        existing =>
+          existing.name === venue.name &&
+          calculateDistance(
+            existing.location.lat, existing.location.lng,
+            venue.location.lat, venue.location.lng
+          ) < 0.05
+      );
+      if (!isDuplicate) deduped.push(venue);
+    });
 
     // Get check-in counts for each venue
     const venuesWithCounts = await Promise.all(
-      venues.map(async (venue) => {
+      deduped.map(async (venue) => {
         const checkins = await Checkin.find({
           placeId: venue.placeId,
           status: 'active',
           expiresAt: { $gt: new Date() }
         });
-        return {
-          ...venue,
-          playerCount: checkins.length
-        };
+        return { ...venue, playerCount: checkins.length };
       })
     );
 
@@ -123,62 +202,101 @@ const searchNearbyVenues = async (req, res) => {
   }
 };
 
-// @desc    Get venue details
+// @desc    Get venue details (from cache or Overpass)
 // @route   GET /api/venues/:placeId
 // @access  Private
 const getVenueDetails = async (req, res) => {
   try {
     const { placeId } = req.params;
 
-    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({
-        success: false,
-        message: 'Google Places API key not configured'
-      });
+    // Try to find venue in cache
+    for (const [, cached] of venueCache) {
+      if (Date.now() - cached.timestamp < CACHE_TTL) {
+        const found = cached.data.find(v => v.placeId === placeId);
+        if (found) {
+          // Get latest check-in count
+          const checkins = await Checkin.find({
+            placeId,
+            status: 'active',
+            expiresAt: { $gt: new Date() }
+          });
+
+          return res.status(200).json({
+            success: true,
+            venue: { ...found, playerCount: checkins.length }
+          });
+        }
+      }
     }
 
-    // Call Google Places Details API
-    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,geometry,rating,user_ratings_total,opening_hours,photos,types&key=${apiKey}`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.status !== 'OK') {
+    // If not in cache, try to fetch from Overpass by OSM ID
+    const match = placeId.match(/^osm-(node|way)-(\d+)$/);
+    if (!match) {
       return res.status(404).json({
         success: false,
         message: 'Venue not found'
       });
     }
 
-    const place = data.result;
+    const [, osmType, osmId] = match;
+    const query = `[out:json][timeout:10];${osmType}(${osmId});out center tags;`;
+
+    const response = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(query)}`
+    });
+
+    if (!response.ok) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch venue details'
+      });
+    }
+
+    const data = await response.json();
+    const element = data.elements?.[0];
+
+    if (!element) {
+      return res.status(404).json({
+        success: false,
+        message: 'Venue not found'
+      });
+    }
+
+    const tags = element.tags || {};
+    const venueLat = element.lat || element.center?.lat;
+    const venueLng = element.lon || element.center?.lon;
+
+    const addressParts = [
+      tags['addr:street'],
+      tags['addr:city'] || tags['addr:suburb'],
+      tags['addr:state']
+    ].filter(Boolean);
+
     const venue = {
       placeId,
-      name: place.name,
-      address: place.formatted_address,
-      location: {
-        lat: place.geometry.location.lat,
-        lng: place.geometry.location.lng
-      },
-      rating: place.rating || null,
-      totalRatings: place.user_ratings_total || 0,
-      types: place.types,
-      openingHours: place.opening_hours?.weekday_text || null,
-      isOpen: place.opening_hours?.open_now ?? null,
-      photos: (place.photos || []).slice(0, 5).map(photo => ({
-        reference: photo.photo_reference,
-        width: photo.width,
-        height: photo.height
-      }))
+      name: tags.name || tags['name:en'] || tags.sport || 'Sports Venue',
+      address: addressParts.length > 0 ? addressParts.join(', ') : `${venueLat?.toFixed(4)}, ${venueLng?.toFixed(4)}`,
+      location: { lat: venueLat, lng: venueLng },
+      sport: tags.sport || null,
+      surface: tags.surface || null,
+      leisure: tags.leisure || null,
+      tags: {
+        sport: tags.sport,
+        leisure: tags.leisure,
+        surface: tags.surface,
+        access: tags.access,
+        lit: tags.lit,
+        opening_hours: tags.opening_hours
+      }
     };
 
-    // Get check-in count
     const checkins = await Checkin.find({
       placeId,
       status: 'active',
       expiresAt: { $gt: new Date() }
     });
-
     venue.playerCount = checkins.length;
 
     res.status(200).json({
@@ -204,20 +322,15 @@ const getVenuePlayers = async (req, res) => {
 
     const checkins = await Checkin.getVenueCheckins(placeId);
 
-    // Get connection status for each player
     const playersWithStatus = await Promise.all(
       checkins.map(async (checkin) => {
         const userId = checkin.user._id;
 
-        // Skip current user
         if (userId.toString() === currentUserId.toString()) {
           return null;
         }
 
-        // Get connection status
         const connectionStatus = await Connection.getConnectionStatus(currentUserId, userId);
-
-        // Calculate time remaining
         const timeRemaining = Math.max(0, checkin.expiresAt - new Date());
         const minutesRemaining = Math.floor(timeRemaining / 60000);
 
@@ -237,7 +350,6 @@ const getVenuePlayers = async (req, res) => {
       })
     );
 
-    // Filter out null values (current user)
     const players = playersWithStatus.filter(p => p !== null);
 
     res.status(200).json({
@@ -254,38 +366,8 @@ const getVenuePlayers = async (req, res) => {
   }
 };
 
-// @desc    Get photo URL for a venue
-// @route   GET /api/venues/photo/:photoReference
-// @access  Private
-const getVenuePhoto = async (req, res) => {
-  try {
-    const { photoReference } = req.params;
-    const { maxWidth = 400 } = req.query;
-
-    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({
-        success: false,
-        message: 'Google Places API key not configured'
-      });
-    }
-
-    const url = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}&photo_reference=${photoReference}&key=${apiKey}`;
-
-    // Redirect to the photo URL
-    res.redirect(url);
-  } catch (error) {
-    console.error('Get Venue Photo Error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get venue photo'
-    });
-  }
-};
-
 module.exports = {
   searchNearbyVenues,
   getVenueDetails,
-  getVenuePlayers,
-  getVenuePhoto
+  getVenuePlayers
 };

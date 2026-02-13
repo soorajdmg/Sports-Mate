@@ -220,21 +220,17 @@ const Venues = () => {
                   </div>
                 ) : venueDetails ? (
                   <div className="space-y-4">
-                    <VenueCard venue={venueDetails} showPhoto />
+                    <VenueCard venue={venueDetails} />
 
                     <CheckinButton
                       venue={venueDetails}
                       sport={user?.sport || selectedSport}
                     />
 
-                    {venueDetails.openingHours && (
+                    {venueDetails.tags?.opening_hours && (
                       <div className="bg-gray-50 rounded-lg p-4">
                         <h4 className="font-medium text-gray-700 mb-2">Opening Hours</h4>
-                        <ul className="text-sm text-gray-600 space-y-1">
-                          {venueDetails.openingHours.map((hours, i) => (
-                            <li key={i}>{hours}</li>
-                          ))}
-                        </ul>
+                        <p className="text-sm text-gray-600">{venueDetails.tags.opening_hours}</p>
                       </div>
                     )}
 

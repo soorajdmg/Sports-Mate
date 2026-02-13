@@ -3,8 +3,7 @@ const router = express.Router();
 const {
   searchNearbyVenues,
   getVenueDetails,
-  getVenuePlayers,
-  getVenuePhoto
+  getVenuePlayers
 } = require('../controllers/venueController');
 const { protect } = require('../middleware/auth');
 
@@ -13,9 +12,6 @@ router.use(protect);
 
 // Search nearby venues
 router.get('/nearby', searchNearbyVenues);
-
-// Get venue photo (proxy to avoid exposing API key)
-router.get('/photo/:photoReference', getVenuePhoto);
 
 // Get venue details
 router.get('/:placeId', getVenueDetails);

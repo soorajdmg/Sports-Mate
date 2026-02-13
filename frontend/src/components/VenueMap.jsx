@@ -1,17 +1,16 @@
-import { useCallback, useState, useEffect } from 'react';
-import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
-import { useVenue } from '../context/VenueContext';
+import { useEffect, useRef, useState } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import VenueCard from './VenueCard';
 
-const containerStyle = {
-  width: '100%',
-  height: '100%'
-};
-
-const defaultCenter = {
-  lat: 20.5937,
-  lng: 78.9629 // India center
-};
+// Fix default marker icons (Leaflet CSS issue with bundlers)
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
 
 const sportMarkerColors = {
   football: '#22c55e',
@@ -25,144 +24,112 @@ const sportMarkerColors = {
   general: '#6366f1'
 };
 
-const VenueMap = ({ venues, userLocation, selectedVenue, onVenueSelect, sport }) => {
-  const [map, setMap] = useState(null);
-  const [infoWindowVenue, setInfoWindowVenue] = useState(null);
-
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+// Create a colored circle marker icon
+const createVenueIcon = (color, playerCount) => {
+  return L.divIcon({
+    className: 'custom-venue-marker',
+    html: `
+      <div style="
+        width: 32px; height: 32px; border-radius: 50% 50% 50% 0;
+        background: ${color}; transform: rotate(-45deg);
+        display: flex; align-items: center; justify-content: center;
+        border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      ">
+        ${playerCount > 0 ? `<span style="
+          transform: rotate(45deg); color: white; font-size: 11px; font-weight: bold;
+        ">${playerCount}</span>` : ''}
+      </div>
+    `,
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32]
   });
+};
 
-  const onLoad = useCallback((map) => {
-    setMap(map);
-  }, []);
+const userIcon = L.divIcon({
+  className: 'custom-user-marker',
+  html: `
+    <div style="
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #3b82f6; border: 3px solid white;
+      box-shadow: 0 0 0 2px #3b82f6, 0 2px 6px rgba(0,0,0,0.3);
+    "></div>
+  `,
+  iconSize: [18, 18],
+  iconAnchor: [9, 9]
+});
 
-  const onUnmount = useCallback(() => {
-    setMap(null);
-  }, []);
+// Component to handle map view changes
+const MapController = ({ userLocation, selectedVenue }) => {
+  const map = useMap();
 
-  // Center map on user location when it changes
   useEffect(() => {
-    if (map && userLocation) {
-      map.panTo(userLocation);
-      map.setZoom(14);
+    if (selectedVenue) {
+      map.setView([selectedVenue.location.lat, selectedVenue.location.lng], 16);
+    } else if (userLocation) {
+      map.setView([userLocation.lat, userLocation.lng], 14);
     }
-  }, [map, userLocation]);
+  }, [map, userLocation, selectedVenue]);
 
-  // Center on selected venue
-  useEffect(() => {
-    if (map && selectedVenue) {
-      map.panTo(selectedVenue.location);
-      map.setZoom(16);
-      setInfoWindowVenue(selectedVenue);
-    }
-  }, [map, selectedVenue]);
+  return null;
+};
 
-  const handleMarkerClick = (venue) => {
-    setInfoWindowVenue(venue);
-    onVenueSelect?.(venue);
-  };
+const VenueMap = ({ venues, userLocation, selectedVenue, onVenueSelect, sport }) => {
+  const defaultCenter = userLocation
+    ? [userLocation.lat, userLocation.lng]
+    : [20.5937, 78.9629]; // India center
 
-  if (loadError) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-100">
-        <div className="text-center">
-          <p className="text-red-500 mb-2">Failed to load map</p>
-          <p className="text-gray-500 text-sm">Please check your API key configuration</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isLoaded) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-100">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
+  const markerColor = sportMarkerColors[sport] || sportMarkerColors.general;
 
   return (
-    <GoogleMap
-      mapContainerStyle={containerStyle}
-      center={userLocation || defaultCenter}
+    <MapContainer
+      center={defaultCenter}
       zoom={userLocation ? 14 : 5}
-      onLoad={onLoad}
-      onUnmount={onUnmount}
-      options={{
-        zoomControl: true,
-        streetViewControl: false,
-        mapTypeControl: false,
-        fullscreenControl: true,
-        styles: [
-          {
-            featureType: 'poi',
-            elementType: 'labels',
-            stylers: [{ visibility: 'off' }]
-          }
-        ]
-      }}
+      style={{ width: '100%', height: '100%' }}
+      zoomControl={true}
     >
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+
+      <MapController userLocation={userLocation} selectedVenue={selectedVenue} />
+
       {/* User location marker */}
       {userLocation && (
-        <Marker
-          position={userLocation}
-          icon={{
-            path: window.google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: '#3b82f6',
-            fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: 3
-          }}
-          title="Your location"
-        />
+        <>
+          <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon}>
+            <Popup>Your location</Popup>
+          </Marker>
+          <Circle
+            center={[userLocation.lat, userLocation.lng]}
+            radius={200}
+            pathOptions={{
+              color: '#3b82f6',
+              fillColor: '#3b82f6',
+              fillOpacity: 0.1,
+              weight: 1
+            }}
+          />
+        </>
       )}
 
       {/* Venue markers */}
       {venues.map((venue) => (
         <Marker
           key={venue.placeId}
-          position={venue.location}
-          onClick={() => handleMarkerClick(venue)}
-          icon={{
-            path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z',
-            fillColor: sportMarkerColors[sport] || sportMarkerColors.general,
-            fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: 1,
-            scale: 1.5,
-            anchor: new window.google.maps.Point(12, 24)
+          position={[venue.location.lat, venue.location.lng]}
+          icon={createVenueIcon(markerColor, venue.playerCount)}
+          eventHandlers={{
+            click: () => onVenueSelect?.(venue)
           }}
-          label={
-            venue.playerCount > 0
-              ? {
-                  text: venue.playerCount.toString(),
-                  color: '#ffffff',
-                  fontSize: '10px',
-                  fontWeight: 'bold'
-                }
-              : undefined
-          }
-        />
-      ))}
-
-      {/* Info window */}
-      {infoWindowVenue && (
-        <InfoWindow
-          position={infoWindowVenue.location}
-          onCloseClick={() => setInfoWindowVenue(null)}
-          options={{ maxWidth: 320 }}
         >
-          <VenueCard
-            venue={infoWindowVenue}
-            compact
-            onSelect={() => onVenueSelect?.(infoWindowVenue)}
-          />
-        </InfoWindow>
-      )}
-    </GoogleMap>
+          <Popup maxWidth={280}>
+            <VenueCard venue={venue} compact onSelect={() => onVenueSelect?.(venue)} />
+          </Popup>
+        </Marker>
+      ))}
+    </MapContainer>
   );
 };
 
