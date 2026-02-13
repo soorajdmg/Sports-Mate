@@ -38,7 +38,8 @@ export const VenueProvider = ({ children }) => {
       return response.data.venues || [];
     } catch (error) {
       console.error('Search venues error:', error);
-      toast.error('Failed to search venues');
+      const msg = error.response?.data?.message || 'Failed to search venues. Please try again.';
+      toast.error(msg);
       return [];
     } finally {
       setLoading(false);
@@ -52,7 +53,8 @@ export const VenueProvider = ({ children }) => {
       return response.data.venue;
     } catch (error) {
       console.error('Get venue details error:', error);
-      toast.error('Failed to get venue details');
+      const msg = error.response?.data?.message || 'Failed to load venue details. Please try again.';
+      toast.error(msg);
       return null;
     }
   }, []);
@@ -76,11 +78,16 @@ export const VenueProvider = ({ children }) => {
     }
 
     try {
+      if (!venue.location?.lat || !venue.location?.lng) {
+        toast.error('Venue location data is missing. Cannot check in.');
+        return false;
+      }
+
       const response = await checkinAPI.checkin({
         placeId: venue.placeId,
         venueName: venue.name,
-        venueAddress: venue.address,
-        venueLocation: venue.location,
+        venueAddress: venue.address || 'Unknown address',
+        venueLocation: { lat: venue.location.lat, lng: venue.location.lng },
         sport: sport || user?.sport || 'general'
       });
 

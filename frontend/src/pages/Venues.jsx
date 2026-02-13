@@ -38,21 +38,30 @@ const Venues = () => {
   const [showSidebar, setShowSidebar] = useState(true);
   const [locationError, setLocationError] = useState(null);
 
-  // Get user location and search venues on mount
-  useEffect(() => {
-    const initializeLocation = async () => {
-      try {
-        const location = await getUserLocation();
-        await searchNearbyVenues(location.lat, location.lng, radius, selectedSport);
-        setLocationError(null);
-      } catch (error) {
+  // Get user location and search venues
+  const initializeLocation = async () => {
+    setLocationError(null);
+    try {
+      const location = await getUserLocation();
+      await searchNearbyVenues(location.lat, location.lng, radius, selectedSport);
+    } catch (error) {
+      if (error?.code === 1) {
+        setLocationError(
+          'Location access was denied. Please click the lock/site-info icon in your browser\'s address bar, allow Location permission, and then click "Try Again".'
+        );
+      } else if (error?.code === 2) {
+        setLocationError('Location is unavailable. Please check your device\'s location settings.');
+      } else if (error?.code === 3) {
+        setLocationError('Location request timed out. Please try again.');
+      } else {
         setLocationError('Unable to get your location. Please enable location services.');
-        toast.error('Please enable location access to find nearby venues');
       }
-    };
+      toast.error('Location access is needed to find nearby venues');
+    }
+  };
 
-    initializeLocation();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { initializeLocation(); }, []);
 
   // Search when filters change
   const handleSearch = useCallback(async () => {
@@ -166,7 +175,10 @@ const Venues = () => {
                 <h3 className="text-lg font-medium text-gray-700 mb-2">Location Required</h3>
                 <p className="text-gray-500 mb-4">{locationError}</p>
                 <button
-                  onClick={() => window.location.reload()}
+                  onClick={() => {
+                    setLocationError(null);
+                    initializeLocation();
+                  }}
                   className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
                 >
                   Try Again
@@ -267,7 +279,13 @@ const Venues = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
                     <p className="text-gray-500">No venues found nearby</p>
-                    <p className="text-gray-400 text-sm mt-1">Try increasing the search radius</p>
+                    <p className="text-gray-400 text-sm mt-1">Try increasing the search radius or selecting a different sport</p>
+                    <button
+                      onClick={handleSearch}
+                      className="mt-3 px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                    >
+                      Search Again
+                    </button>
                   </div>
                 ) : (
                   <div className="space-y-4">

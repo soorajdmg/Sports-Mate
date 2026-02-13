@@ -3,16 +3,32 @@ const User = require('../models/User');
 const Connection = require('../models/Connection');
 
 // Sport type to Overpass API query tags mapping
+// Each entry is { key, value, regex } — regex uses ~"value" syntax in Overpass QL
 const sportOverpassTags = {
-  football: ['sport=soccer', 'sport=football', 'leisure=pitch"],sport"~"soccer|football"'],
-  cricket: ['sport=cricket'],
-  badminton: ['sport=badminton'],
-  tennis: ['sport=tennis'],
-  basketball: ['sport=basketball'],
-  volleyball: ['sport=volleyball'],
-  hockey: ['sport=hockey', 'sport=field_hockey'],
-  swimming: ['leisure=swimming_pool', 'sport=swimming'],
-  general: ['leisure=sports_centre', 'leisure=stadium', 'leisure=pitch', 'leisure=fitness_centre']
+  football: [
+    { key: 'sport', value: 'soccer' },
+    { key: 'sport', value: 'football' },
+    { key: 'sport', value: 'soccer|football', regex: true }
+  ],
+  cricket: [{ key: 'sport', value: 'cricket' }],
+  badminton: [{ key: 'sport', value: 'badminton' }],
+  tennis: [{ key: 'sport', value: 'tennis' }],
+  basketball: [{ key: 'sport', value: 'basketball' }],
+  volleyball: [{ key: 'sport', value: 'volleyball' }],
+  hockey: [
+    { key: 'sport', value: 'hockey' },
+    { key: 'sport', value: 'field_hockey' }
+  ],
+  swimming: [
+    { key: 'leisure', value: 'swimming_pool' },
+    { key: 'sport', value: 'swimming' }
+  ],
+  general: [
+    { key: 'leisure', value: 'sports_centre' },
+    { key: 'leisure', value: 'stadium' },
+    { key: 'leisure', value: 'pitch' },
+    { key: 'leisure', value: 'fitness_centre' }
+  ]
 };
 
 // In-memory cache for venue searches
@@ -22,30 +38,27 @@ const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 // Build Overpass query for sport venues
 const buildOverpassQuery = (lat, lng, radiusMeters, sport) => {
   const tags = sportOverpassTags[sport] || sportOverpassTags.general;
+  const around = `(around:${radiusMeters},${lat},${lng})`;
 
   // Build union of queries for each tag
-  let nodeQueries = '';
-  let wayQueries = '';
+  let queries = '';
 
   tags.forEach(tag => {
-    const [key, value] = tag.split('=');
-    nodeQueries += `  node["${key}"="${value}"](around:${radiusMeters},${lat},${lng});\n`;
-    wayQueries += `  way["${key}"="${value}"](around:${radiusMeters},${lat},${lng});\n`;
+    const filter = tag.regex
+      ? `["${tag.key}"~"${tag.value}"]`
+      : `["${tag.key}"="${tag.value}"]`;
+    queries += `  node${filter}${around};\n`;
+    queries += `  way${filter}${around};\n`;
   });
 
-  // Also search for generic sport/leisure facilities nearby
+  // Also search for pitches tagged with the specific sport
   if (sport !== 'general') {
-    nodeQueries += `  node["leisure"="pitch"]["sport"="${sport === 'football' ? 'soccer' : sport}"](around:${radiusMeters},${lat},${lng});\n`;
-    wayQueries += `  way["leisure"="pitch"]["sport"="${sport === 'football' ? 'soccer' : sport}"](around:${radiusMeters},${lat},${lng});\n`;
+    const sportName = sport === 'football' ? 'soccer' : sport;
+    queries += `  node["leisure"="pitch"]["sport"="${sportName}"]${around};\n`;
+    queries += `  way["leisure"="pitch"]["sport"="${sportName}"]${around};\n`;
   }
 
-  return `
-[out:json][timeout:25];
-(
-${nodeQueries}${wayQueries}
-);
-out center tags;
-  `.trim();
+  return `[out:json][timeout:25];\n(\n${queries});\nout center tags;`;
 };
 
 // Calculate distance between two coordinates using Haversine formula
@@ -97,10 +110,11 @@ const searchNearbyVenues = async (req, res) => {
     });
 
     if (!response.ok) {
-      console.error('Overpass API Error:', response.status);
-      return res.status(500).json({
+      const errorBody = await response.text();
+      console.error('Overpass API Error:', response.status, errorBody);
+      return res.status(502).json({
         success: false,
-        message: 'Failed to fetch venues'
+        message: 'Venue search service is temporarily unavailable. Please try again.'
       });
     }
 

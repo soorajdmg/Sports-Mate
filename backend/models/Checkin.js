@@ -58,11 +58,10 @@ checkinSchema.index({ placeId: 1, status: 1 });
 checkinSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 86400 });
 
 // Pre-save hook to set expiry time (2 hours from creation)
-checkinSchema.pre('save', function(next) {
+checkinSchema.pre('save', function() {
   if (this.isNew && !this.expiresAt) {
     this.expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours
   }
-  next();
 });
 
 // Static method to get active check-in for a user
